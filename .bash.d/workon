@@ -130,7 +130,7 @@ _,workon() {
              -maxdepth 1 \
              -type d \
              -not -name ".*" \
-             -printf '%f\n'
+        | while read f; do basename $f; done
     )
     COMPREPLY=($(compgen -W '$envs' -- "$cur"))
     return 0
