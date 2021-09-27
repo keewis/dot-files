@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+
+CONDA_HOME=$HOME/.local/opt/miniconda3
+
+,set-project() {
+    local path="$CONDA_PREFIX/.workon_path"
+
+    echo -n $PWD > $path
+}
+
+,cd-env() {
+    local type env path
+
+    if [ "$#" -ne 1 ]; then
+        echo "usage: ${FUNCNAME} project|env"
+        return -1
+    fi
+
+    type="$1"
+    env="$CONDA_PREFIX"
+
+    if [ -z "$CONDA_PREFIX" ]; then
+        echo "not in a environment"
+        return -1
+    fi
+
+    case "$type" in
+        project)
+            path="$CONDA_PREFIX/.workon_path"
+            if [ -f "$path" ]; then
+                path="$(cat $path)"
+            fi
+            ;;
+        env)
+            path="$CONDA_PREFIX"
+            ;;
+
+        *)
+            echo "invalid option: $type"
+            return -1
+    esac
+
+    if [ -d "$path" ]; then
+        cd "$path"
+    fi
+}
+
+_,get-environment() {
+    (set +o posix; set) | sed -ne '/^\w\+=/!q; p;'
+}
+
+_,clean-environment() {
+    local var
+
+    if [[ -z "$CONDA_PREFIX" ]]; then
+        return 1;
+    fi
+
+    if [[ -f "$CONDA_PREFIX/.workon_environment_set" ]]; then
+        for var in $(cat $CONDA_PREFIX/.workon_environment_set); do
+            eval "unset $var";
+        done
+    fi
+}
+
+,workon() {
+    local type root environment_path before env
+
+    if [[ "$#" -ne 1 ]]; then
+        echo "usage: ${FUNCNAME} <environment>";
+        return -1
+    fi
+
+    env="$1"
+
+    if [[ -n "$CONDA_PREFIX" ]]; then
+        # remove any set variables
+        _,clean-environment
+    fi
+
+    conda activate "$env"
+
+    # prevent using user site dirs
+    export PYTHONNOUSERSITE=PLEASE
+
+    # customize the environment
+    environment_path="$CONDA_PREFIX/.workon_environment"
+    if [[ -n "$CONDA_PREFIX" && -f "$environment_path" ]]; then
+        # source the environment path and save the names of the variables that were set
+        before=$(_,get-environment | sort);
+        source "$environment_path"
+        comm -13 <(printf "%s" "$before") <(_,get-environment | grep -v "^before" | sort) | awk -F "=" '{ print $1 }' > $CONDA_PREFIX/.workon_environment_set
+    fi
+
+    # change to the project's directory, if set
+    ,cd-env project
+
+    return 0;
+}
+
+,deactivate() {
+    if [[ -z "$CONDA_PREFIX" ]]; then
+        echo "No activated environment found."
+        return 0;
+    fi
+
+    _,clean-environment
+
+    conda deactivate
+}
+
+
+_,workon() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local prev="${COMP_WORDS[COMP_CWORD - 1]}"
+    local envs
+    COMPREPLY=()
+
+    if [[ "$prev" != ",workon" || "$COMP_CWORD" -ge 2 ]]; then
+        return 0
+    fi
+
+    envs=$(
+        find $CONDA_HOME/envs \
+             -mindepth 1 \
+             -maxdepth 1 \
+             -type d \
+             -not -name ".*" \
+             -printf '%f\n'
+    )
+    COMPREPLY=($(compgen -W '$envs' -- "$cur"))
+    return 0
+} && complete -F _,workon ,workon
+
+_,cd-env() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    if [[ "${COMP_CWORD}" -ge 2 ]]; then
+        COMPREPLY=()
+    else
+        COMPREPLY=($(compgen -W 'project env' -- "$cur"))
+    fi
+
+    return 0
+} && complete -F _,cd-env ,cd-env
