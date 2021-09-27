@@ -89,7 +89,11 @@ _,clean-environment() {
         # source the environment path and save the names of the variables that were set
         before=$(_,get-environment | sort);
         source "$environment_path"
-        comm -13 <(printf "%s" "$before") <(_,get-environment | grep -v "^before" | sort) | awk -F "=" '{ print $1 }' > $CONDA_PREFIX/.workon_environment_set
+        comm -13 \
+             <(printf "%s" "$before") \
+             <(_,get-environment | grep -v "^before" | sort) \
+            | awk -F "=" '{ print $1 }' \
+            > $CONDA_PREFIX/.workon_environment_set
     fi
 
     # change to the project's directory, if set
